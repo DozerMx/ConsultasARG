@@ -3,144 +3,155 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consulta APIs con Proxies</title>
+    <title>Consulta APIs Frontend Only</title>
+    <style>
+        .error { color: red; }
+        .success { color: green; }
+        .loading { color: blue; }
+        pre { white-space: pre-wrap; word-wrap: break-word; }
+        .result-item { 
+            margin: 10px 0;
+            padding: 10px;
+            border: 1px solid #ccc;
+        }
+    </style>
 </head>
 <body>
     <h1>Consulta APIs</h1>
     <form id="consulta-form">
         <label for="dni">DNI:</label>
-        <input type="text" id="dni" required>
+        <input type="text" id="dni" required pattern="[0-9]{7,8}" title="DNI debe tener 7 u 8 dígitos">
+        <label for="sexo">Sexo:</label>
+        <select id="sexo" required>
+            <option value="M">Masculino</option>
+            <option value="F">Femenino</option>
+        </select>
         <button type="submit">Consultar</button>
     </form>
 
-    <pre id="resultados">Esperando consulta...</pre>
+    <div id="resultados"></div>
 
     <script>
-        let proxies = [];
+        const CORS_PROXIES = [
+            'https://corsproxy.io/?',
+            'https://api.allorigins.win/raw?url=',
+            'https://api.codetabs.com/v1/proxy?quest='
+        ];
+
         let currentProxyIndex = 0;
 
-        // Cargar proxies desde proxies.txt
-        async function cargarProxies() {
-            try {
-                const respuesta = await fetch('proxies.txt');
-                const texto = await respuesta.text();
-                proxies = texto.split('\n')
-                    .map(p => p.trim())
-                    .filter(p => p);
-                console.log('Proxies cargados:', proxies.length);
-            } catch (error) {
-                console.error('Error cargando proxies:', error);
-            }
-        }
-
-        // Obtener siguiente proxy con rotación
         function getNextProxy() {
-            if (proxies.length === 0) return null;
-            const proxy = proxies[currentProxyIndex];
-            currentProxyIndex = (currentProxyIndex + 1) % proxies.length;
+            const proxy = CORS_PROXIES[currentProxyIndex];
+            currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
             return proxy;
         }
 
-        async function consultarUrlConProxy(url, proxy) {
+        async function fetchWithProxy(url, options = {}) {
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 10000);
+            const timeout = setTimeout(() => controller.abort(), 15000);
 
-            try {
-                const proxyUrl = `http://${proxy}`;
-                const finalUrl = url;
-                
-                const opciones = {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json',
-                        'User-Agent': 'Mozilla/5.0',
-                        'X-Requested-With': 'XMLHttpRequest'
-                    },
-                    signal: controller.signal,
-                    mode: 'cors'
-                };
-
-                const respuesta = await fetch(finalUrl, {
-                    ...opciones,
-                    headers: {
-                        ...opciones.headers,
-                        'Proxy-Authorization': `Basic ${btoa(proxy)}`
-                    }
-                });
-
-                clearTimeout(timeout);
-
-                if (!respuesta.ok) {
-                    throw new Error(`Error HTTP ${respuesta.status}`);
-                }
-
-                const datos = await respuesta.json();
-                return { success: true, datos };
-            } catch (error) {
-                clearTimeout(timeout);
-                return { 
-                    success: false, 
-                    error: error.name === 'AbortError' ? 'Timeout' : error.message 
-                };
-            }
-        }
-
-        async function consultarUrl(url, maxIntentos = 3) {
-            // Solo usar proxies para credicuotas
-            const necesitaProxy = url.includes('credicuotas.com.ar');
-            
-            if (!necesitaProxy) {
+            // Intentar con diferentes proxies
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
                 try {
-                    const respuesta = await fetch(url, {
+                    const proxyUrl = `${getNextProxy()}${encodeURIComponent(url)}`;
+                    
+                    const response = await fetch(proxyUrl, {
+                        ...options,
+                        signal: controller.signal,
                         headers: {
                             'Accept': 'application/json',
-                            'User-Agent': 'Mozilla/5.0'
+                            'User-Agent': 'Mozilla/5.0',
+                            ...options.headers
                         }
                     });
-                    const datos = await respuesta.json();
-                    return { success: true, datos };
+
+                    clearTimeout(timeout);
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+                    return { success: true, data };
                 } catch (error) {
-                    return { success: false, error: error.message };
+                    if (i === CORS_PROXIES.length - 1) {
+                        clearTimeout(timeout);
+                        return {
+                            success: false,
+                            error: error.name === 'AbortError' ? 
+                                'Tiempo de espera agotado' : 
+                                `Error: ${error.message}`
+                        };
+                    }
+                    // Si falla, continuará con el siguiente proxy
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                 }
             }
-
-            // Para credicuotas, intentar con diferentes proxies
-            for (let intento = 0; intento < maxIntentos; intento++) {
-                const proxy = getNextProxy();
-                if (!proxy) {
-                    return { success: false, error: 'No hay proxies disponibles' };
-                }
-
-                const resultado = await consultarUrlConProxy(url, proxy);
-                if (resultado.success || 
-                    (resultado.error && !resultado.error.includes('429'))) {
-                    return resultado;
-                }
-
-                // Esperar antes de intentar con otro proxy
-                await new Promise(resolve => setTimeout(resolve, 1000));
-            }
-
-            return { success: false, error: 'Agotados todos los intentos con proxies' };
         }
 
-        async function consultarApis(dni) {
-            const urls = [
-                `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
-                `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
-                `https://teldni-g77k.onrender.com/${dni}`,
-                `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=M`,
-                `https://fiscalizar.seguridadvial.gob.ar/retenciones?numeroDocumento=${dni}&sexo=M`
+        async function consultarApis(dni, sexo) {
+            const apis = [
+                {
+                    nombre: 'Credicuotas',
+                    url: `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`
+                },
+                {
+                    nombre: 'IOSEP',
+                    url: `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`
+                },
+                {
+                    nombre: 'TelDNI',
+                    url: `https://teldni-g77k.onrender.com/${dni}`
+                },
+                {
+                    nombre: 'Licencias',
+                    url: `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=${sexo}`
+                },
+                {
+                    nombre: 'Retenciones',
+                    url: `https://fiscalizar.seguridadvial.gob.ar/retenciones?numeroDocumento=${dni}&sexo=${sexo}`
+                }
             ];
 
             const resultados = [];
+            const resultadosDiv = document.getElementById('resultados');
+            resultadosDiv.innerHTML = '';
 
-            for (const url of urls) {
-                const resultado = await consultarUrl(url);
-                resultados.push({
-                    url,
-                    ...(resultado.success ? { datos: resultado.datos } : { error: resultado.error })
-                });
+            for (const api of apis) {
+                const divResultado = document.createElement('div');
+                divResultado.className = 'result-item';
+                divResultado.innerHTML = `
+                    <h3>${api.nombre}</h3>
+                    <p class="loading">Consultando...</p>
+                `;
+                resultadosDiv.appendChild(divResultado);
+
+                try {
+                    const resultado = await fetchWithProxy(api.url);
+                    
+                    divResultado.innerHTML = `
+                        <h3>${api.nombre}</h3>
+                        <pre class="${resultado.success ? 'success' : 'error'}">
+                            ${JSON.stringify(resultado.success ? resultado.data : resultado.error, null, 2)}
+                        </pre>
+                    `;
+
+                    resultados.push({
+                        nombre: api.nombre,
+                        url: api.url,
+                        ...(resultado.success ? { datos: resultado.data } : { error: resultado.error })
+                    });
+                } catch (error) {
+                    divResultado.innerHTML = `
+                        <h3>${api.nombre}</h3>
+                        <pre class="error">Error: ${error.message}</pre>
+                    `;
+                    resultados.push({
+                        nombre: api.nombre,
+                        url: api.url,
+                        error: error.message
+                    });
+                }
             }
 
             return resultados;
@@ -149,19 +160,15 @@
         document.getElementById('consulta-form').addEventListener('submit', async (e) => {
             e.preventDefault();
             const dni = document.getElementById('dni').value;
-            const resultadosDiv = document.getElementById('resultados');
-            resultadosDiv.textContent = 'Realizando consultas...';
-
+            const sexo = document.getElementById('sexo').value;
+            
             try {
-                const resultados = await consultarApis(dni);
-                resultadosDiv.textContent = JSON.stringify(resultados, null, 2);
+                await consultarApis(dni, sexo);
             } catch (error) {
-                resultadosDiv.textContent = `Error general: ${error.message}`;
+                document.getElementById('resultados').innerHTML = 
+                    `<p class="error">Error general: ${error.message}</p>`;
             }
         });
-
-        // Inicializar
-        cargarProxies();
     </script>
 </body>
 </html>

@@ -1,35 +1,131 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consulta APIs Frontend Only</title>
+    <title>Sistema de Consulta</title>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.css" rel="stylesheet">
     <style>
-        .error { color: red; }
-        .success { color: green; }
-        .loading { color: blue; }
-        pre { white-space: pre-wrap; word-wrap: break-word; }
-        .result-item { 
-            margin: 10px 0;
-            padding: 10px;
-            border: 1px solid #ccc;
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f3f4f6;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .card {
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            margin-bottom: 1rem;
+            transition: transform 0.2s;
+        }
+
+        .card:hover {
+            transform: translateY(-2px);
+        }
+
+        .success-data {
+            background-color: #f0fdf4;
+            border-left: 4px solid #22c55e;
+        }
+
+        .error-data {
+            background-color: #fef2f2;
+            border-left: 4px solid #ef4444;
+        }
+
+        .loading-indicator {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid #3b82f6;
+            width: 24px;
+            height: 24px;
+            animation: spin 1s linear infinite;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .form-control {
+            border: 1px solid #e5e7eb;
+            border-radius: 8px;
+            padding: 0.75rem;
+            width: 100%;
+            transition: border-color 0.2s;
+        }
+
+        .form-control:focus {
+            outline: none;
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
+        }
+
+        .btn {
+            background-color: #3b82f6;
+            color: white;
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn:hover {
+            background-color: #2563eb;
+            transform: translateY(-1px);
+        }
+
+        .result-container {
+            background: white;
+            border-radius: 12px;
+            padding: 1.5rem;
+            margin-top: 2rem;
+        }
+
+        .data-item {
+            padding: 1rem;
+            border-radius: 8px;
+            margin-bottom: 1rem;
         }
     </style>
 </head>
 <body>
-    <h1>Consulta APIs</h1>
-    <form id="consulta-form">
-        <label for="dni">DNI:</label>
-        <input type="text" id="dni" required pattern="[0-9]{7,8}" title="DNI debe tener 7 u 8 dígitos">
-        <label for="sexo">Sexo:</label>
-        <select id="sexo" required>
-            <option value="M">Masculino</option>
-            <option value="F">Femenino</option>
-        </select>
-        <button type="submit">Consultar</button>
-    </form>
+    <div class="container">
+        <div class="card p-6 mb-8">
+            <h1 class="text-2xl font-bold mb-6 text-gray-800">Sistema de Consulta</h1>
+            <form id="consulta-form" class="space-y-4">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label for="dni" class="block text-sm font-medium text-gray-700 mb-2">Número de Documento</label>
+                        <input type="text" id="dni" class="form-control" required pattern="[0-9]{7,8}" title="El documento debe tener 7 u 8 dígitos">
+                    </div>
+                    <div>
+                        <label for="sexo" class="block text-sm font-medium text-gray-700 mb-2">Género</label>
+                        <select id="sexo" class="form-control" required>
+                            <option value="">Seleccione...</option>
+                            <option value="M">Masculino</option>
+                            <option value="F">Femenino</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex justify-end mt-4">
+                    <button type="submit" class="btn">
+                        Consultar
+                    </button>
+                </div>
+            </form>
+        </div>
 
-    <div id="resultados"></div>
+        <div id="resultados" class="space-y-4"></div>
+    </div>
 
     <script>
         const CORS_PROXIES = [
@@ -46,11 +142,52 @@
             return proxy;
         }
 
+        function formatearDatos(data) {
+            if (typeof data === 'string') {
+                try {
+                    return JSON.parse(data);
+                } catch {
+                    return data;
+                }
+            }
+            return data;
+        }
+
+        function crearTarjetaResultado(data, success) {
+            const formattedData = formatearDatos(data);
+            let contenido = '';
+
+            if (typeof formattedData === 'object' && formattedData !== null) {
+                contenido = Object.entries(formattedData)
+                    .filter(([key]) => !key.toLowerCase().includes('error'))
+                    .map(([key, value]) => {
+                        if (typeof value === 'object') {
+                            return `<div class="mb-2">
+                                <span class="font-semibold">${key}:</span>
+                                <pre class="mt-1 text-sm">${JSON.stringify(value, null, 2)}</pre>
+                            </div>`;
+                        }
+                        return `<div class="mb-2">
+                            <span class="font-semibold">${key}:</span> ${value}
+                        </div>`;
+                    }).join('');
+            } else {
+                contenido = `<pre class="text-sm">${formattedData}</pre>`;
+            }
+
+            return `
+                <div class="data-item ${success ? 'success-data' : 'error-data'}">
+                    <div class="text-sm">
+                        ${contenido}
+                    </div>
+                </div>
+            `;
+        }
+
         async function fetchWithProxy(url, options = {}, expectJson = true) {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 15000);
 
-            // Intentar con diferentes proxies
             for (let i = 0; i < CORS_PROXIES.length; i++) {
                 try {
                     const proxyUrl = `${getNextProxy()}${encodeURIComponent(url)}`;
@@ -68,7 +205,7 @@
                     clearTimeout(timeout);
 
                     if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                        throw new Error(`Error en la consulta`);
                     }
 
                     let data;
@@ -76,8 +213,7 @@
                         try {
                             data = await response.json();
                         } catch (e) {
-                            const text = await response.text();
-                            data = text;
+                            data = await response.text();
                         }
                     } else {
                         data = await response.text();
@@ -102,81 +238,62 @@
         async function consultarApis(dni, sexo) {
             const apis = [
                 {
-                    nombre: 'Credicuotas',
                     url: `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
                     expectJson: true
                 },
                 {
-                    nombre: 'IOSEP',
                     url: `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
                     expectJson: true
                 },
                 {
-                    nombre: 'TelDNI',
                     url: `https://teldni-g77k.onrender.com/${dni}`,
                     expectJson: true
                 },
                 {
-                    nombre: 'Licencias',
                     url: `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=${sexo}`,
                     expectJson: true
                 },
                 {
-                    nombre: 'Retenciones',
-                    url: `https://fiscalizar.seguridadvial.gob.ar/api/retenciones?numeroDocumento=${dni}&sexo=${sexo}`, // Corregida la URL
+                    url: `https://fiscalizar.seguridadvial.gob.ar/api/retenciones?numeroDocumento=${dni}&sexo=${sexo}`,
                     expectJson: false
                 }
             ];
 
-            const resultados = [];
             const resultadosDiv = document.getElementById('resultados');
-            resultadosDiv.innerHTML = '';
+            resultadosDiv.innerHTML = `
+                <div class="result-container">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800">Resultados de la consulta</h2>
+                        <div class="loading-indicator"></div>
+                    </div>
+                    <div id="resultados-contenido" class="space-y-4"></div>
+                </div>
+            `;
+
+            const contenidoDiv = document.getElementById('resultados-contenido');
 
             for (const api of apis) {
-                const divResultado = document.createElement('div');
-                divResultado.className = 'result-item';
-                divResultado.innerHTML = `
-                    <h3>${api.nombre}</h3>
-                    <p class="loading">Consultando...</p>
-                `;
-                resultadosDiv.appendChild(divResultado);
-
                 try {
                     const resultado = await fetchWithProxy(api.url, {}, api.expectJson);
-                    
-                    let displayData;
-                    if (typeof resultado.data === 'string') {
-                        displayData = resultado.data;
-                    } else {
-                        displayData = JSON.stringify(resultado.data, null, 2);
-                    }
-
-                    divResultado.innerHTML = `
-                        <h3>${api.nombre}</h3>
-                        <pre class="${resultado.success ? 'success' : 'error'}">
-                            ${displayData}
-                        </pre>
-                    `;
-
-                    resultados.push({
-                        nombre: api.nombre,
-                        url: api.url,
-                        ...(resultado.success ? { datos: resultado.data } : { error: resultado.error })
-                    });
+                    const html = crearTarjetaResultado(
+                        resultado.success ? resultado.data : resultado.error,
+                        resultado.success
+                    );
+                    contenidoDiv.insertAdjacentHTML('beforeend', html);
                 } catch (error) {
-                    divResultado.innerHTML = `
-                        <h3>${api.nombre}</h3>
-                        <pre class="error">Error: ${error.message}</pre>
-                    `;
-                    resultados.push({
-                        nombre: api.nombre,
-                        url: api.url,
-                        error: error.message
-                    });
+                    const html = crearTarjetaResultado(
+                        `Error en la consulta: ${error.message}`,
+                        false
+                    );
+                    contenidoDiv.insertAdjacentHTML('beforeend', html);
                 }
             }
 
-            return resultados;
+            // Remover el indicador de carga
+            const loadingIndicator = resultadosDiv.querySelector('.loading-indicator');
+            if (loadingIndicator) {
+                loadingIndicator.remove();
+            }
         }
 
         document.getElementById('consulta-form').addEventListener('submit', async (e) => {
@@ -184,11 +301,21 @@
             const dni = document.getElementById('dni').value;
             const sexo = document.getElementById('sexo').value;
             
+            if (!dni || !sexo) {
+                alert('Por favor complete todos los campos');
+                return;
+            }
+
             try {
                 await consultarApis(dni, sexo);
             } catch (error) {
-                document.getElementById('resultados').innerHTML = 
-                    `<p class="error">Error general: ${error.message}</p>`;
+                document.getElementById('resultados').innerHTML = `
+                    <div class="result-container">
+                        <div class="data-item error-data">
+                            <p>Error en la consulta: ${error.message}</p>
+                        </div>
+                    </div>
+                `;
             }
         });
     </script>

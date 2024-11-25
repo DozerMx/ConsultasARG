@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Consulta APIs con Rate Limiting</title>
+    <title>Consulta APIs con Proxies</title>
 </head>
 <body>
     <h1>Consulta APIs</h1>
@@ -16,93 +16,112 @@
     <pre id="resultados">Esperando consulta...</pre>
 
     <script>
-        // Control de rate limiting
-        const rateLimits = {
-            'credicuotas.com.ar': {
-                requests: [],
-                maxRequests: 2,
-                timeWindow: 60000 // 60 segundos
-            }
-        };
+        let proxies = [];
+        let currentProxyIndex = 0;
 
-        function canMakeRequest(domain) {
-            const now = Date.now();
-            const limit = rateLimits[domain];
-            
-            if (!limit) return true;
-            
-            // Limpiar solicitudes antiguas
-            limit.requests = limit.requests.filter(time => now - time < limit.timeWindow);
-            
-            // Verificar si podemos hacer más solicitudes
-            if (limit.requests.length < limit.maxRequests) {
-                limit.requests.push(now);
-                return true;
-            }
-            
-            return false;
-        }
-
-        async function sleep(ms) {
-            return new Promise(resolve => setTimeout(resolve, ms));
-        }
-
-        async function consultarUrl(url, dni) {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 15000); // Aumentado a 15 segundos
-            
-            const domain = new URL(url).hostname;
-            
+        // Cargar proxies desde proxies.txt
+        async function cargarProxies() {
             try {
-                // Verificar rate limiting
-                if (!canMakeRequest(domain)) {
-                    await sleep(5000); // Esperar 5 segundos si excedimos el límite
-                }
+                const respuesta = await fetch('proxies.txt');
+                const texto = await respuesta.text();
+                proxies = texto.split('\n')
+                    .map(p => p.trim())
+                    .filter(p => p);
+                console.log('Proxies cargados:', proxies.length);
+            } catch (error) {
+                console.error('Error cargando proxies:', error);
+            }
+        }
 
-                const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`;
+        // Obtener siguiente proxy con rotación
+        function getNextProxy() {
+            if (proxies.length === 0) return null;
+            const proxy = proxies[currentProxyIndex];
+            currentProxyIndex = (currentProxyIndex + 1) % proxies.length;
+            return proxy;
+        }
+
+        async function consultarUrlConProxy(url, proxy) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 10000);
+
+            try {
+                const proxyUrl = `http://${proxy}`;
+                const finalUrl = url;
                 
                 const opciones = {
                     method: 'GET',
                     headers: {
                         'Accept': 'application/json',
                         'User-Agent': 'Mozilla/5.0',
-                        'Origin': window.location.origin
+                        'X-Requested-With': 'XMLHttpRequest'
                     },
-                    signal: controller.signal
+                    signal: controller.signal,
+                    mode: 'cors'
                 };
 
-                const respuesta = await fetch(proxyUrl, opciones);
-                clearTimeout(timeout);
-                
-                if (respuesta.status === 429) {
-                    throw new Error('Rate limit excedido. Esperando...');
-                }
-                
-                if (!respuesta.ok) {
-                    // Ignorar error 404 para retenciones y devolver array vacío
-                    if (respuesta.status === 404 && url.includes('retenciones')) {
-                        return { success: true, datos: [] };
+                const respuesta = await fetch(finalUrl, {
+                    ...opciones,
+                    headers: {
+                        ...opciones.headers,
+                        'Proxy-Authorization': `Basic ${btoa(proxy)}`
                     }
+                });
+
+                clearTimeout(timeout);
+
+                if (!respuesta.ok) {
                     throw new Error(`Error HTTP ${respuesta.status}`);
                 }
-                
+
                 const datos = await respuesta.json();
-                
-                // Normalizar respuestas vacías
-                if (Array.isArray(datos) && datos.length === 0) {
-                    return { success: true, datos: { mensaje: "No se encontraron datos" } };
-                }
-                
                 return { success: true, datos };
             } catch (error) {
                 clearTimeout(timeout);
-                
-                if (error.name === 'AbortError') {
-                    return { success: false, error: 'La consulta excedió el tiempo límite' };
-                }
-                
-                return { success: false, error: error.message };
+                return { 
+                    success: false, 
+                    error: error.name === 'AbortError' ? 'Timeout' : error.message 
+                };
             }
+        }
+
+        async function consultarUrl(url, maxIntentos = 3) {
+            // Solo usar proxies para credicuotas
+            const necesitaProxy = url.includes('credicuotas.com.ar');
+            
+            if (!necesitaProxy) {
+                try {
+                    const respuesta = await fetch(url, {
+                        headers: {
+                            'Accept': 'application/json',
+                            'User-Agent': 'Mozilla/5.0'
+                        }
+                    });
+                    const datos = await respuesta.json();
+                    return { success: true, datos };
+                } catch (error) {
+                    return { success: false, error: error.message };
+                }
+            }
+
+            // Para credicuotas, intentar con diferentes proxies
+            for (let intento = 0; intento < maxIntentos; intento++) {
+                const proxy = getNextProxy();
+                if (!proxy) {
+                    return { success: false, error: 'No hay proxies disponibles' };
+                }
+
+                const resultado = await consultarUrlConProxy(url, proxy);
+                if (resultado.success || 
+                    (resultado.error && !resultado.error.includes('429'))) {
+                    return resultado;
+                }
+
+                // Esperar antes de intentar con otro proxy
+                await new Promise(resolve => setTimeout(resolve, 1000));
+            }
+
+            return { success: false, error: 'Agotados todos los intentos con proxies' };
         }
 
         async function consultarApis(dni) {
@@ -117,26 +136,11 @@
             const resultados = [];
 
             for (const url of urls) {
-                let resultado = null;
-                
-                // Intentar hasta 3 veces con retardos incrementales
-                for (let intento = 0; intento < 3; intento++) {
-                    resultado = await consultarUrl(url, dni);
-                    
-                    if (resultado.success || 
-                        (resultado.error && !resultado.error.includes('Rate limit'))) {
-                        break;
-                    }
-                    
-                    // Esperar antes de reintentar (2, 4, 8 segundos)
-                    await sleep(Math.pow(2, intento + 1) * 1000);
-                }
-                
-                if (resultado.success) {
-                    resultados.push({ url, datos: resultado.datos });
-                } else {
-                    resultados.push({ url, error: resultado.error });
-                }
+                const resultado = await consultarUrl(url);
+                resultados.push({
+                    url,
+                    ...(resultado.success ? { datos: resultado.datos } : { error: resultado.error })
+                });
             }
 
             return resultados;
@@ -155,6 +159,9 @@
                 resultadosDiv.textContent = `Error general: ${error.message}`;
             }
         });
+
+        // Inicializar
+        cargarProxies();
     </script>
 </body>
 </html>

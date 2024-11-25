@@ -58,12 +58,12 @@
 
     async function consultarDNI(dni) {
       const urls = [
-        `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
-        `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
-        `https://teldni-g77k.onrender.com/${dni}`,
-        `https://fiscalizar.seguridadvial.gob.ar//api/licencias?numeroDocumento=${dni}&sexo=M`,
-        `https://fiscalizar.seguridadvial.gob.ar//retenciones?numeroDocumento=${dni}&sexo=M`
-      ];
+  `https://cors-anywhere.herokuapp.com/https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
+  `https://cors-anywhere.herokuapp.com/https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
+  `https://cors-anywhere.herokuapp.com/https://teldni-g77k.onrender.com/${dni}`,
+  `https://cors-anywhere.herokuapp.com/https://fiscalizar.seguridadvial.gob.ar//api/licencias?numeroDocumento=${dni}&sexo=M`,
+  `https://cors-anywhere.herokuapp.com/https://fiscalizar.seguridadvial.gob.ar//retenciones?numeroDocumento=${dni}&sexo=M`
+];
 
       const results = [];
       for (const url of urls) {

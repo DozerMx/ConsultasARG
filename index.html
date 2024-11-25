@@ -71,13 +71,11 @@
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
 
-                    // Manejar respuesta según el tipo esperado
                     let data;
                     if (expectJson) {
                         try {
                             data = await response.json();
                         } catch (e) {
-                            // Si falla el parse JSON, intentar como texto
                             const text = await response.text();
                             data = text;
                         }
@@ -96,7 +94,6 @@
                                 `Error: ${error.message}`
                         };
                     }
-                    // Si falla, continuará con el siguiente proxy
                     await new Promise(resolve => setTimeout(resolve, 1000));
                 }
             }
@@ -126,8 +123,8 @@
                 },
                 {
                     nombre: 'Retenciones',
-                    url: `https://fiscalizar.seguridadvial.gob.ar/retenciones?numeroDocumento=${dni}&sexo=${sexo}`,
-                    expectJson: false  // Esta API devuelve texto plano
+                    url: `https://fiscalizar.seguridadvial.gob.ar/api/retenciones?numeroDocumento=${dni}&sexo=${sexo}`, // Corregida la URL
+                    expectJson: false
                 }
             ];
 
@@ -149,9 +146,9 @@
                     
                     let displayData;
                     if (typeof resultado.data === 'string') {
-                        displayData = resultado.data;  // Texto plano
+                        displayData = resultado.data;
                     } else {
-                        displayData = JSON.stringify(resultado.data, null, 2);  // JSON formateado
+                        displayData = JSON.stringify(resultado.data, null, 2);
                     }
 
                     divResultado.innerHTML = `

@@ -46,7 +46,7 @@
             return proxy;
         }
 
-        async function fetchWithProxy(url, options = {}) {
+        async function fetchWithProxy(url, options = {}, expectJson = true) {
             const controller = new AbortController();
             const timeout = setTimeout(() => controller.abort(), 15000);
 
@@ -59,7 +59,7 @@
                         ...options,
                         signal: controller.signal,
                         headers: {
-                            'Accept': 'application/json',
+                            'Accept': expectJson ? 'application/json' : 'text/plain',
                             'User-Agent': 'Mozilla/5.0',
                             ...options.headers
                         }
@@ -71,7 +71,20 @@
                         throw new Error(`HTTP error! status: ${response.status}`);
                     }
 
-                    const data = await response.json();
+                    // Manejar respuesta según el tipo esperado
+                    let data;
+                    if (expectJson) {
+                        try {
+                            data = await response.json();
+                        } catch (e) {
+                            // Si falla el parse JSON, intentar como texto
+                            const text = await response.text();
+                            data = text;
+                        }
+                    } else {
+                        data = await response.text();
+                    }
+
                     return { success: true, data };
                 } catch (error) {
                     if (i === CORS_PROXIES.length - 1) {
@@ -93,23 +106,28 @@
             const apis = [
                 {
                     nombre: 'Credicuotas',
-                    url: `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`
+                    url: `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
+                    expectJson: true
                 },
                 {
                     nombre: 'IOSEP',
-                    url: `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`
+                    url: `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
+                    expectJson: true
                 },
                 {
                     nombre: 'TelDNI',
-                    url: `https://teldni-g77k.onrender.com/${dni}`
+                    url: `https://teldni-g77k.onrender.com/${dni}`,
+                    expectJson: true
                 },
                 {
                     nombre: 'Licencias',
-                    url: `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=${sexo}`
+                    url: `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=${sexo}`,
+                    expectJson: true
                 },
                 {
                     nombre: 'Retenciones',
-                    url: `https://fiscalizar.seguridadvial.gob.ar/retenciones?numeroDocumento=${dni}&sexo=${sexo}`
+                    url: `https://fiscalizar.seguridadvial.gob.ar/retenciones?numeroDocumento=${dni}&sexo=${sexo}`,
+                    expectJson: false  // Esta API devuelve texto plano
                 }
             ];
 
@@ -127,12 +145,19 @@
                 resultadosDiv.appendChild(divResultado);
 
                 try {
-                    const resultado = await fetchWithProxy(api.url);
+                    const resultado = await fetchWithProxy(api.url, {}, api.expectJson);
                     
+                    let displayData;
+                    if (typeof resultado.data === 'string') {
+                        displayData = resultado.data;  // Texto plano
+                    } else {
+                        displayData = JSON.stringify(resultado.data, null, 2);  // JSON formateado
+                    }
+
                     divResultado.innerHTML = `
                         <h3>${api.nombre}</h3>
                         <pre class="${resultado.success ? 'success' : 'error'}">
-                            ${JSON.stringify(resultado.success ? resultado.data : resultado.error, null, 2)}
+                            ${displayData}
                         </pre>
                     `;
 

@@ -1,76 +1,120 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Consulta APIs con Proxies</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consulta APIs con Proxies</title>
 </head>
 <body>
-  <h1>Consulta APIs utilizando Proxies</h1>
-  <form id="consulta-form">
-    <label for="dni">DNI:</label>
-    <input type="text" id="dni" required>
-    <button type="submit">Consultar</button>
-  </form>
+    <h1>Consulta APIs utilizando Proxies</h1>
+    <form id="consulta-form">
+        <label for="dni">DNI:</label>
+        <input type="text" id="dni" required>
+        <button type="submit">Consultar</button>
+    </form>
 
-  <pre id="resultados">Cargando...</pre>
+    <pre id="resultados">Esperando consulta...</pre>
 
-  <script>
-    let proxies = [];
+    <script>
+        let proxies = [];
 
-    // Cargar proxies desde proxies.txt
-    async function cargarProxies() {
-      try {
-        const respuesta = await fetch('proxies.txt');
-        const texto = await respuesta.text();
-        proxies = texto.split('\n').map(p => p.trim()).filter(p => p);
-        console.log('Proxies cargados:', proxies);
-      } catch (error) {
-        console.error('Error cargando proxies:', error);
-      }
-    }
-
-    // Función para realizar la consulta
-    async function consultarApis(dni) {
-      const urls = [
-        `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
-        `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
-        `https://teldni-g77k.onrender.com/${dni}`,
-        `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=M`,
-        `https://fiscalizar.seguridadvial.gob.ar/retenciones?numeroDocumento=${dni}&sexo=M`
-      ];
-
-      const resultados = [];
-      const proxy = proxies[Math.floor(Math.random() * proxies.length)]; // Seleccionar un proxy aleatorio
-
-      for (const url of urls) {
-        try {
-          // Realizar consulta a través del proxy
-          const respuesta = await fetch(`http://${proxy}/${url}`);
-          if (!respuesta.ok) throw new Error(`Error HTTP ${respuesta.status}`);
-          const datos = await respuesta.json();
-          resultados.push({ url, datos });
-        } catch (error) {
-          resultados.push({ url, error: error.message });
+        // Cargar proxies desde proxies.txt
+        async function cargarProxies() {
+            try {
+                const respuesta = await fetch('proxies.txt');
+                const texto = await respuesta.text();
+                proxies = texto.split('\n').map(p => p.trim()).filter(p => p);
+                console.log('Proxies cargados:', proxies);
+            } catch (error) {
+                console.error('Error cargando proxies:', error);
+                document.getElementById('resultados').textContent = 'Error cargando lista de proxies. Verifica que el archivo proxies.txt existe.';
+            }
         }
-      }
 
-      return resultados;
-    }
+        // Función para realizar la consulta con timeout y retry
+        async function consultarUrl(url, dni, proxy) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 10000); // 10 segundos de timeout
 
-    // Manejo del formulario
-    document.getElementById('consulta-form').addEventListener('submit', async (e) => {
-      e.preventDefault();
-      const dni = document.getElementById('dni').value;
-      const resultadosDiv = document.getElementById('resultados');
-      resultadosDiv.textContent = 'Realizando consultas...';
+            try {
+                const proxyUrl = `https://cors-anywhere.herokuapp.com/${url}`; // Usar CORS proxy
+                
+                const opciones = {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json',
+                        'User-Agent': 'Mozilla/5.0',
+                        'Origin': window.location.origin
+                    },
+                    signal: controller.signal
+                };
 
-      const resultados = await consultarApis(dni);
-      resultadosDiv.textContent = JSON.stringify(resultados, null, 2);
-    });
+                const respuesta = await fetch(proxyUrl, opciones);
+                clearTimeout(timeout);
+                
+                if (!respuesta.ok) {
+                    throw new Error(`Error HTTP ${respuesta.status}`);
+                }
+                
+                const datos = await respuesta.json();
+                return { success: true, datos };
+            } catch (error) {
+                clearTimeout(timeout);
+                return { 
+                    success: false, 
+                    error: error.name === 'AbortError' ? 'Timeout de la consulta' : error.message 
+                };
+            }
+        }
 
-    // Inicializar
-    cargarProxies();
-  </script>
+        // Función principal de consulta
+        async function consultarApis(dni) {
+            const urls = [
+                `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
+                `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
+                `https://teldni-g77k.onrender.com/${dni}`,
+                `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=M`,
+                `https://fiscalizar.seguridadvial.gob.ar/retenciones?numeroDocumento=${dni}&sexo=M`
+            ];
+
+            const resultados = [];
+
+            for (const url of urls) {
+                const proxy = proxies.length ? proxies[Math.floor(Math.random() * proxies.length)] : null;
+                
+                // Intentar hasta 3 veces con diferentes proxies
+                for (let intento = 0; intento < 3; intento++) {
+                    const resultado = await consultarUrl(url, dni, proxy);
+                    if (resultado.success) {
+                        resultados.push({ url, datos: resultado.datos });
+                        break;
+                    }
+                    if (intento === 2) { // Último intento
+                        resultados.push({ url, error: resultado.error });
+                    }
+                }
+            }
+
+            return resultados;
+        }
+
+        // Manejo del formulario
+        document.getElementById('consulta-form').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const dni = document.getElementById('dni').value;
+            const resultadosDiv = document.getElementById('resultados');
+            resultadosDiv.textContent = 'Realizando consultas...';
+
+            try {
+                const resultados = await consultarApis(dni);
+                resultadosDiv.textContent = JSON.stringify(resultados, null, 2);
+            } catch (error) {
+                resultadosDiv.textContent = `Error general: ${error.message}`;
+            }
+        });
+
+        // Inicializar
+        cargarProxies();
+    </script>
 </body>
 </html>

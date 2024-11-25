@@ -248,8 +248,12 @@
 
     <div id="main-content" class="hidden">
         <div class="container">
+            <div class="flex justify-between items-center mb-6">
+                <h1 class="text-2xl font-bold glitch-text cyber-gradient" data-text="SISTEMA DE CONSULTA">SISTEMA DE CONSULTA</h1>
+                <button onclick="logout()" class="btn">Cerrar Sesión</button>
+            </div>
+            
             <div class="card p-6 mb-8">
-                <h1 class="text-2xl font-bold mb-6 glitch-text cyber-gradient" data-text="SISTEMA DE CONSULTA">SISTEMA DE CONSULTA</h1>
                 <form id="consulta-form" class="space-y-4">
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
@@ -278,7 +282,51 @@
     </div>
 
     <script>
-        // Generar copos de nieve
+        // Manejo de estado de login
+        const ACCESS_CODE = 'DozerMx';
+        
+        function checkLoginState() {
+            const isLoggedIn = localStorage.getItem('isLoggedIn');
+            if (isLoggedIn === 'true') {
+                showMainContent();
+            } else {
+                showLogin();
+            }
+        }
+
+        function showMainContent() {
+            document.getElementById('login').style.display = 'none';
+            document.getElementById('main-content').classList.remove('hidden');
+            document.getElementById('main-content').classList.add('animate__animated', 'animate__fadeIn');
+        }
+
+        function showLogin() {
+            document.getElementById('login').style.display = 'flex';
+            document.getElementById('main-content').classList.add('hidden');
+        }
+
+        function checkAccess() {
+            const accessCode = document.getElementById('access-code').value;
+            if (accessCode === ACCESS_CODE) {
+                localStorage.setItem('isLoggedIn', 'true');
+                document.getElementById('login').classList.add('animate__fadeOut');
+                setTimeout(() => {
+                    showMainContent();
+                }, 1000);
+            } else {
+                alert('Código de acceso incorrecto');
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('isLoggedIn');
+            document.getElementById('main-content').classList.add('animate__fadeOut');
+            setTimeout(() => {
+                location.reload();
+            }, 500);
+        }
+
+        // Crear efecto de nieve
         function createSnow() {
             const snowContainer = document.getElementById('snow-container');
             const snow = document.createElement('div');
@@ -291,33 +339,207 @@
             });
         }
 
-        setInterval(createSnow, 100);
-
-        // Sistema de login
-        function checkAccess() {
-            const accessCode = document.getElementById('access-code').value;
-            if (accessCode === 'DozerMx') {
-                document.getElementById('login').classList.add('animate__fadeOut');
-                setTimeout(() => {
-                    document.getElementById('login').style.display = 'none';
-                    document.getElementById('main-content').classList.remove('hidden');
-                    document.getElementById('main-content').classList.add('animate__animated', 'animate__fadeIn');
-                }, 1000);
-            } else {
-                alert('Código de acceso incorrecto');
-            }
-        }
-
-        // Resto del código JavaScript existente...
+        // Configuración de CORS Proxies
         const CORS_PROXIES = [
             'https://corsproxy.io/?',
             'https://api.allorigins.win/raw?url=',
             'https://api.codetabs.com/v1/proxy?quest='
         ];
 
-        // [El resto del código JavaScript se mantiene igual que en la versión anterior]
-        // ... (mantener todo el código JavaScript anterior relacionado con las consultas)
+        let currentProxyIndex = 0;
 
+        function getNextProxy() {
+            const proxy = CORS_PROXIES[currentProxyIndex];
+            currentProxyIndex = (currentProxyIndex + 1) % CORS_PROXIES.length;
+            return proxy;
+        }
+
+        function formatearDatos(data) {
+            if (typeof data === 'string') {
+                try {
+                    return JSON.parse(data);
+                } catch {
+                    return data;
+                }
+            }
+            return data;
+        }
+
+        function crearTarjetaResultado(data, success) {
+            const formattedData = formatearDatos(data);
+            let contenido = '';
+
+            if (typeof formattedData === 'object' && formattedData !== null) {
+                contenido = Object.entries(formattedData)
+                    .filter(([key]) => !key.toLowerCase().includes('error'))
+                    .map(([key, value]) => {
+                        if (typeof value === 'object') {
+                            return `<div class="mb-2">
+                                <span class="font-semibold">${key}:</span>
+                                <pre class="mt-1 text-sm">${JSON.stringify(value, null, 2)}</pre>
+                            </div>`;
+                        }
+                        return `<div class="mb-2">
+                            <span class="font-semibold">${key}:</span> ${value}
+                        </div>`;
+                    }).join('');
+            } else {
+                contenido = `<pre class="text-sm">${formattedData}</pre>`;
+            }
+
+            return `
+                <div class="data-item ${success ? 'success-data' : 'error-data'}">
+                    <div class="text-sm">
+                        ${contenido}
+                    </div>
+                </div>
+            `;
+        }
+
+        async function fetchWithProxy(url, options = {}, expectJson = true) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
+                try {
+                    const proxyUrl = `${getNextProxy()}${encodeURIComponent(url)}`;
+                    
+                    const response = await fetch(proxyUrl, {
+                        ...options,
+                        signal: controller.signal,
+                        headers: {
+                            'Accept': expectJson ? 'application/json' : 'text/plain',
+                            'User-Agent': 'Mozilla/5.0',
+                            ...options.headers
+                        }
+                    });
+
+                    clearTimeout(timeout);
+
+                    if (!response.ok) {
+                        throw new Error(`Error en la consulta`);
+                    }
+
+                    let data;
+                    if (expectJson) {
+                        try {
+                            data = await response.json();
+                        } catch (e) {
+                            data = await response.text();
+                        }
+                    } else {
+                        data = await response.text();
+                    }
+
+                    return { success: true, data };
+                } catch (error) {
+                    if (i === CORS_PROXIES.length - 1) {
+                        clearTimeout(timeout);
+                        return {
+                            success: false,
+                            error: error.name === 'AbortError' ? 
+                                'Tiempo de espera agotado' : 
+                                `Error: ${error.message}`
+                        };
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        }
+
+        async function consultarApis(dni, sexo) {
+            const apis = [
+                {
+                    url: `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
+                    expectJson: true
+                },
+                {
+                    url: `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
+                    expectJson: true
+                },
+                {
+                    url: `https://teldni-g77k.onrender.com/${dni}`,
+                    expectJson: true
+                },
+                {
+                    url: `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=${sexo}`,
+                    expectJson: true
+                },
+                {
+                    url: `https://fiscalizar.seguridadvial.gob.ar/api/retenciones?numeroDocumento=${dni}&sexo=${sexo}`,
+                    expectJson: false
+                }
+            ];
+
+            const resultadosDiv = document.getElementById('resultados');
+            resultadosDiv.innerHTML = `
+                <div class="result-container">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800">Resultados de la consulta</h2>
+                        <div class="loading-indicator"></div>
+                    </div>
+                    <div id="resultados-contenido" class="space-y-4"></div>
+                </div>
+            `;
+
+            const contenidoDiv = document.getElementById('resultados-contenido');
+
+            for (const api of apis) {
+                try {
+                    const resultado = await fetchWithProxy(api.url, {}, api.expectJson);
+                    const html = crearTarjetaResultado(
+                        resultado.success ? resultado.data : resultado.error,
+                        resultado.success
+                    );
+                    contenidoDiv.insertAdjacentHTML('beforeend', html);
+                } catch (error) {
+                    const html = crearTarjetaResultado(
+                        `Error en la consulta: ${error.message}`,
+                        false
+                    );
+                    contenidoDiv.insertAdjacentHTML('beforeend', html);
+                }
+            }
+
+            const loadingIndicator = resultadosDiv.querySelector('.loading-indicator');
+            if (loadingIndicator) {
+                loadingIndicator.remove();
+            }
+        }
+
+        // Inicialización
+        document.addEventListener('DOMContentLoaded', () => {
+            // Verificar estado de login
+            checkLoginState();
+            
+            // Iniciar animación de nieve
+            setInterval(createSnow, 100);
+
+            // Manejar envío del formulario
+            document.getElementById('consulta-form').addEventListener('submit', async (e) => {
+                e.preventDefault(); // Prevenir el envío tradicional del formulario
+                
+                const dni = document.getElementById('dni').value;
+                const sexo = document.getElementById('sexo').value;
+                
+                if (!dni || !sexo) {
+                    alert('Por favor complete todos los campos');
+                    return;
+                }
+
+                try {
+                    await consultarApis(dni, sexo);
+                } catch (error) {
+                    document.getElementById('resultados').innerHTML = `
+                        <div class="result-container">
+                            <div class="data-item error-data">
+                                <p>Error en la consulta: ${error.message}</p>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+        });
     </script>
 </body>
 </html>

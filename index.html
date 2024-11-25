@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Consulta de DNI</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+    }
+    input, button {
+      padding: 10px;
+      margin: 5px;
+      font-size: 16px;
+    }
+    .results {
+      margin-top: 20px;
+    }
+    .error {
+      color: red;
+    }
+  </style>
+</head>
+<body>
+  <h1>Consulta de DNI</h1>
+  <input type="text" id="dni" placeholder="Ingresa el DNI">
+  <button id="consultar">Consultar</button>
+
+  <div class="results">
+    <h3>Resultados:</h3>
+    <pre id="output">Aquí aparecerán los resultados...</pre>
+  </div>
+
+  <script>
+    let proxies = [];
+
+    // Carga el archivo de proxies y los guarda en una lista
+    async function cargarProxies() {
+      try {
+        const response = await fetch('proxies.txt'); // Asegúrate de que proxies.txt esté accesible
+        const text = await response.text();
+        proxies = text.split('\n').map(proxy => proxy.trim()).filter(proxy => proxy !== "");
+        if (proxies.length === 0) throw new Error("No se encontraron proxies en el archivo.");
+        console.log("Proxies cargados:", proxies);
+      } catch (error) {
+        console.error("Error al cargar los proxies:", error);
+        document.getElementById("output").innerText = "Error al cargar los proxies. Verifica el archivo proxies.txt.";
+      }
+    }
+
+    // Selecciona un proxy aleatorio de la lista
+    function obtenerProxyAleatorio() {
+      if (proxies.length === 0) return null;
+      const index = Math.floor(Math.random() * proxies.length);
+      return proxies[index];
+    }
+
+    async function consultarDNI(dni) {
+      const urls = [
+        `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
+        `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
+        `https://teldni-g77k.onrender.com/${dni}`,
+        `https://fiscalizar.seguridadvial.gob.ar//api/licencias?numeroDocumento=${dni}&sexo=M`,
+        `https://fiscalizar.seguridadvial.gob.ar//retenciones?numeroDocumento=${dni}&sexo=M`
+      ];
+
+      const results = [];
+      for (const url of urls) {
+        const proxy = obtenerProxyAleatorio();
+        if (!proxy) {
+          results.push({ url, error: "No hay proxies disponibles para la consulta." });
+          continue;
+        }
+
+        const proxyUrl = `http://${proxy}`; // Formato para proxies HTTP
+        try {
+          const response = await fetch(`https://${proxyUrl}/${url}`, {
+            method: "GET",
+            headers: { "Content-Type": "application/json" },
+          });
+
+          if (response.ok) {
+            const data = await response.json();
+            results.push({ url, data });
+          } else {
+            results.push({ url, error: `Error ${response.status}: ${response.statusText}` });
+          }
+        } catch (error) {
+          results.push({ url, error: error.message });
+        }
+      }
+
+      return results;
+    }
+
+    document.getElementById("consultar").addEventListener("click", async () => {
+      const dni = document.getElementById("dni").value;
+      if (!dni) {
+        document.getElementById("output").innerText = "Por favor ingresa un DNI.";
+        return;
+      }
+
+      document.getElementById("output").innerText = "Cargando proxies y consultando...";
+      await cargarProxies();
+
+      if (proxies.length > 0) {
+        const resultados = await consultarDNI(dni);
+        document.getElementById("output").innerText = JSON.stringify(resultados, null, 2);
+      } else {
+        document.getElementById("output").innerText = "No se pudieron cargar proxies.";
+      }
+    });
+  </script>
+</body>
+</html>

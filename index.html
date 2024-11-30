@@ -25,7 +25,6 @@
             overflow-x: hidden;
         }
 
-        /* Nuevo fondo cyberpunk con grid y efectos */
         .cyber-background {
             position: fixed;
             top: 0;
@@ -101,7 +100,6 @@
             50% { opacity: 1; }
         }
 
-        /* El resto de los estilos permanecen igual */
         .container {
             max-width: 1000px;
             margin: 0 auto;
@@ -311,7 +309,6 @@
     </div>
 
     <script>
-        // Manejo de estado de login
         const ACCESS_CODE = 'DozerMx';
         
         function checkLoginState() {
@@ -355,7 +352,6 @@
             }, 500);
         }
 
-        // Crear efecto de nieve
         function createSnow() {
             const snowContainer = document.getElementById('snow-container');
             const snow = document.createElement('div');
@@ -368,7 +364,6 @@
             });
         }
 
-        // Configuración de CORS Proxies
         const CORS_PROXIES = [
             'https://corsproxy.io/?',
             'https://api.allorigins.win/raw?url=',
@@ -395,180 +390,177 @@
         }
 
         function crearTarjetaResultado(data, success) {
-            const formattedData = formatearDatos(data);
-            let contenido = '';
+    const formattedData = formatearDatos(data);
+    let contenido = '';
 
-            if (typeof formattedData === 'object' && formattedData !== null) {
-                contenido = Object.entries(formattedData)
-                    .filter(([key]) => !key.toLowerCase().includes('error'))
-                    .map(([key, value]) => {
-                        if (typeof value === 'object') {
-                            return `<div class="mb-2">
-                                <span class="font-semibold">${key}:</span>
-                                <pre class="mt-1 text-sm">${JSON.stringify(value, null, 2)}</pre>
-                            </div>`;
-                        }
-                        return `<div class="mb-2">
-                            <span class="font-semibold">${key}:</span> ${value}
-                        </div>`;
-                    }).join('');
-            } else {
-                contenido = `<pre class="text-sm">${formattedData}</pre>`;
-            }
-
-            return `
-                <div class="data-item ${success ? 'success-data' : 'error-data'}">
-                    <div class="text-sm">
-                        ${contenido}
-                    </div>
-                </div>
-            `;
-        }
-
-        async function fetchWithProxy(url, options = {}, expectJson = true) {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 15000);
-
-            for (let i = 0; i < CORS_PROXIES.length; i++) {
-                try {
-                    const proxyUrl = `${getNextProxy()}${encodeURIComponent(url)}`;
-                    
-                    const response = await fetch(proxyUrl, {
-                        ...options,
-                        signal: controller.signal,
-                        headers: {
-                            'Accept': expectJson ? 'application/json' : 'text/plain',
-                            'User-Agent': 'Mozilla/5.0',
-                            ...options.headers
-                        }
-                    });
-
-                    clearTimeout(timeout);
-
-                    if (!response.ok) {
-                        throw new Error(`Error en la consulta`);
-                    }
-
-                    let data;
-                    if (expectJson) {
-                        try {
-                            data = await response.json();
-                        } catch (e) {
-                            data = await response.text();
-                        }
-                    } else {
-                        data = await response.text();
-                    }
-
-                    return { success: true, data };
-                } catch (error) {
-                    if (i === CORS_PROXIES.length - 1) {
-                        clearTimeout(timeout);
-                        return {
-                            success: false,
-                            error: error.name === 'AbortError' ? 
-                                'Tiempo de espera agotado' : 
-                                `Error: ${error.message}`
-                        };
-                    }
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+    if (typeof formattedData === 'object' && formattedData !== null) {
+        contenido = Object.entries(formattedData)
+            .filter(([key]) => !key.toLowerCase().includes('error'))
+            .map(([key, value]) => {
+                if (typeof value === 'object') {
+                    return `<div class="mb-2">
+                        <span class="font-semibold">${key}:</span>
+                        <pre class="mt-1 text-sm">${JSON.stringify(value, null, 2)}</pre>
+                    </div>`;
                 }
-            }
-        }
+                return `<div class="mb-2">
+                    <span class="font-semibold">${key}:</span> ${value}
+                </div>`;
+            }).join('');
+    } else {
+        contenido = `<pre class="text-sm">${formattedData}</pre>`;
+    }
 
-        async function consultarApis(dni, sexo) {
-            const apis = [
-                {
-                    url: `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
-                    expectJson: true
-                },
-                {
-                    url: `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
-                    expectJson: true
-                },
-                {
-                    url: `https://teldni-g77k.onrender.com/${dni}`,
-                    expectJson: true
-                },
-                {
-                    url: `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=${sexo}`,
-                    expectJson: true
-                },
-                {
-                    url: `https://fiscalizar.seguridadvial.gob.ar/api/retenciones?numeroDocumento=${dni}&sexo=${sexo}`,
-                    expectJson: false
-                }
-            ];
+    return `
+        <div class="data-item ${success ? 'success-data' : 'error-data'}">
+            <div class="text-sm">
+                ${contenido}
+            </div>
+        </div>
+    `;
+}
 
-            const resultadosDiv = document.getElementById('resultados');
-            resultadosDiv.innerHTML = `
-                <div class="result-container">
-                    <div class="flex items-center justify-between mb-4">
-                        <h2 class="text-xl font-semibold text-gray-800">Resultados de la consulta</h2>
-                        <div class="loading-indicator"></div>
-                    </div>
-                    <div id="resultados-contenido" class="space-y-4"></div>
-                </div>
-            `;
+async function fetchWithProxy(url, options = {}, expectJson = true) {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15000);
 
-            const contenidoDiv = document.getElementById('resultados-contenido');
-
-            for (const api of apis) {
-                try {
-                    const resultado = await fetchWithProxy(api.url, {}, api.expectJson);
-                    const html = crearTarjetaResultado(
-                        resultado.success ? resultado.data : resultado.error,
-                        resultado.success
-                    );
-                    contenidoDiv.insertAdjacentHTML('beforeend', html);
-                } catch (error) {
-                    const html = crearTarjetaResultado(
-                        `Error en la consulta: ${error.message}`,
-                        false
-                    );
-                    contenidoDiv.insertAdjacentHTML('beforeend', html);
-                }
-            }
-
-            const loadingIndicator = resultadosDiv.querySelector('.loading-indicator');
-            if (loadingIndicator) {
-                loadingIndicator.remove();
-            }
-        }
-
-        // Inicialización
-        document.addEventListener('DOMContentLoaded', () => {
-            // Verificar estado de login
-            checkLoginState();
+    for (let i = 0; i < CORS_PROXIES.length; i++) {
+        try {
+            const proxyUrl = `${getNextProxy()}${encodeURIComponent(url)}`;
             
-            // Iniciar animación de nieve
-            setInterval(createSnow, 100);
-
-            // Manejar envío del formulario
-            document.getElementById('consulta-form').addEventListener('submit', async (e) => {
-                e.preventDefault(); // Prevenir el envío tradicional del formulario
-                
-                const dni = document.getElementById('dni').value;
-                const sexo = document.getElementById('sexo').value;
-                
-                if (!dni || !sexo) {
-                    alert('Por favor complete todos los campos');
-                    return;
-                }
-
-                try {
-                    await consultarApis(dni, sexo);
-                } catch (error) {
-                    document.getElementById('resultados').innerHTML = `
-                        <div class="result-container">
-                            <div class="data-item error-data">
-                                <p>Error en la consulta: ${error.message}</p>
-                            </div>
-                        </div>
-                    `;
+            const response = await fetch(proxyUrl, {
+                ...options,
+                signal: controller.signal,
+                headers: {
+                    'Accept': expectJson ? 'application/json' : 'text/plain',
+                    'User-Agent': 'Mozilla/5.0',
+                    ...options.headers
                 }
             });
-        });
-    </script>
-</body>
-</html>
+
+            clearTimeout(timeout);
+
+            if (!response.ok) {
+                throw new Error(`Error en la consulta`);
+            }
+
+            let data;
+            if (expectJson) {
+                try {
+                    data = await response.json();
+                } catch (e) {
+                    data = await response.text();
+                }
+            } else {
+                data = await response.text();
+            }
+
+            return { success: true, data };
+        } catch (error) {
+            if (i === CORS_PROXIES.length - 1) {
+                clearTimeout(timeout);
+                return {
+                    success: false,
+                    error: error.name === 'AbortError' ? 
+                        'Tiempo de espera agotado' : 
+                        `Error: ${error.message}`
+                };
+            }
+            await new Promise(resolve => setTimeout(resolve, 1000));
+        }
+    }
+}
+
+async function consultarApis(dni, sexo) {
+    const apis = [
+        {
+            url: `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
+            expectJson: true
+        },
+        {
+            url: `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
+            expectJson: true
+        },
+        {
+            url: `https://teldni-g77k.onrender.com/${dni}`,
+            expectJson: true
+        },
+        {
+            url: `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=${sexo}`,
+            expectJson: true
+        },
+        {
+            url: `https://fiscalizar.seguridadvial.gob.ar/api/retenciones?numeroDocumento=${dni}&sexo=${sexo}`,
+            expectJson: false
+        },
+        {
+            url: `https://renapersanjuan.onrender.com/${dni}/${sexo}`,
+            expectJson: true
+        }
+    ];
+
+    const resultadosDiv = document.getElementById('resultados');
+    resultadosDiv.innerHTML = `
+        <div class="result-container">
+            <div class="flex items-center justify-between mb-4">
+                <h2 class="text-xl font-semibold text-gray-800">Resultados de la consulta</h2>
+                <div class="loading-indicator"></div>
+            </div>
+            <div id="resultados-contenido" class="space-y-4"></div>
+        </div>
+    `;
+
+    const contenidoDiv = document.getElementById('resultados-contenido');
+
+    for (const api of apis) {
+        try {
+            const resultado = await fetchWithProxy(api.url, {}, api.expectJson);
+            const html = crearTarjetaResultado(
+                resultado.success ? resultado.data : resultado.error,
+                resultado.success
+            );
+            contenidoDiv.insertAdjacentHTML('beforeend', html);
+        } catch (error) {
+            const html = crearTarjetaResultado(
+                `Error en la consulta: ${error.message}`,
+                false
+            );
+            contenidoDiv.insertAdjacentHTML('beforeend', html);
+        }
+    }
+
+    const loadingIndicator = resultadosDiv.querySelector('.loading-indicator');
+    if (loadingIndicator) {
+        loadingIndicator.remove();
+    }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+    checkLoginState();
+    
+    setInterval(createSnow, 100);
+
+    document.getElementById('consulta-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const dni = document.getElementById('dni').value;
+        const sexo = document.getElementById('sexo').value;
+        
+        if (!dni || !sexo) {
+            alert('Por favor complete todos los campos');
+            return;
+        }
+
+        try {
+            await consultarApis(dni, sexo);
+        } catch (error) {
+            document.getElementById('resultados').innerHTML = `
+                <div class="result-container">
+                    <div class="data-item error-data">
+                        <p>Error en la consulta: ${error.message}</p>
+                    </div>
+                </div>
+            `;
+        }
+    });
+});

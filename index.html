@@ -352,37 +352,6 @@
             }, 500);
         }
 
-        function createSnow() {
-            const snowContainer = document.createElement('div');
-            snowContainer.id = 'snow-container';
-            snowContainer.style.position = 'fixed';
-            snowContainer.style.top = '0';
-            snowContainer.style.left = '0';
-            snowContainer.style.width = '100%';
-            snowContainer.style.height = '100%';
-            snowContainer.style.pointerEvents = 'none';
-            snowContainer.style.zIndex = '1000';
-            document.body.appendChild(snowContainer);
-
-            const snow = document.createElement('div');
-            snow.className = 'snow';
-            snow.style.position = 'absolute';
-            snow.style.width = '10px';
-            snow.style.height = '10px';
-            snow.style.background = 'white';
-            snow.style.borderRadius = '50%';
-            snow.style.filter = 'blur(1px)';
-            snow.style.left = Math.random() * 100 + 'vw';
-            snow.style.animationDuration = Math.random() * 3 + 2 + 's';
-            snow.style.animationTimingFunction = 'linear';
-            snow.style.animationName = 'snowfall';
-            snow.style.animationIterationCount = 'infinite';
-            snowContainer.appendChild(snow);
-
-            snow.addEventListener('animationend', () => {
-                snow.remove();
-            });
-        }
 
         const CORS_PROXIES = [
             'https://corsproxy.io/?',
@@ -558,8 +527,6 @@
         document.addEventListener('DOMContentLoaded', () => {
             checkLoginState();
             
-            setInterval(createSnow, 100);
-
             document.getElementById('consulta-form').addEventListener('submit', async (e) => {
                 e.preventDefault();
                 
@@ -584,20 +551,6 @@
                 }
             });
         });
-
-        // Add snowfall animation
-        const style = document.createElement('style');
-        style.textContent = `
-            @keyframes snowfall {
-                0% {
-                    transform: translateY(-10vh);
-                }
-                100% {
-                    transform: translateY(100vh);
-                }
-            }
-        `;
-        document.head.appendChild(style);
     </script>
 </body>
 </html>

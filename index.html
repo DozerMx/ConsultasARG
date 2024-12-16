@@ -353,10 +353,30 @@
         }
 
         function createSnow() {
-            const snowContainer = document.getElementById('snow-container');
+            const snowContainer = document.createElement('div');
+            snowContainer.id = 'snow-container';
+            snowContainer.style.position = 'fixed';
+            snowContainer.style.top = '0';
+            snowContainer.style.left = '0';
+            snowContainer.style.width = '100%';
+            snowContainer.style.height = '100%';
+            snowContainer.style.pointerEvents = 'none';
+            snowContainer.style.zIndex = '1000';
+            document.body.appendChild(snowContainer);
+
             const snow = document.createElement('div');
             snow.className = 'snow';
+            snow.style.position = 'absolute';
+            snow.style.width = '10px';
+            snow.style.height = '10px';
+            snow.style.background = 'white';
+            snow.style.borderRadius = '50%';
+            snow.style.filter = 'blur(1px)';
             snow.style.left = Math.random() * 100 + 'vw';
+            snow.style.animationDuration = Math.random() * 3 + 2 + 's';
+            snow.style.animationTimingFunction = 'linear';
+            snow.style.animationName = 'snowfall';
+            snow.style.animationIterationCount = 'infinite';
             snowContainer.appendChild(snow);
 
             snow.addEventListener('animationend', () => {
@@ -390,177 +410,195 @@
         }
 
         function crearTarjetaResultado(data, success) {
-    const formattedData = formatearDatos(data);
-    let contenido = '';
+            const formattedData = formatearDatos(data);
+            let contenido = '';
 
-    if (typeof formattedData === 'object' && formattedData !== null) {
-        contenido = Object.entries(formattedData)
-            .filter(([key]) => !key.toLowerCase().includes('error'))
-            .map(([key, value]) => {
-                if (typeof value === 'object') {
-                    return `<div class="mb-2">
-                        <span class="font-semibold">${key}:</span>
-                        <pre class="mt-1 text-sm">${JSON.stringify(value, null, 2)}</pre>
-                    </div>`;
-                }
-                return `<div class="mb-2">
-                    <span class="font-semibold">${key}:</span> ${value}
-                </div>`;
-            }).join('');
-    } else {
-        contenido = `<pre class="text-sm">${formattedData}</pre>`;
-    }
-
-    return `
-        <div class="data-item ${success ? 'success-data' : 'error-data'}">
-            <div class="text-sm">
-                ${contenido}
-            </div>
-        </div>
-    `;
-}
-
-async function fetchWithProxy(url, options = {}, expectJson = true) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
-
-    for (let i = 0; i < CORS_PROXIES.length; i++) {
-        try {
-            const proxyUrl = `${getNextProxy()}${encodeURIComponent(url)}`;
-            
-            const response = await fetch(proxyUrl, {
-                ...options,
-                signal: controller.signal,
-                headers: {
-                    'Accept': expectJson ? 'application/json' : 'text/plain',
-                    'User-Agent': 'Mozilla/5.0',
-                    ...options.headers
-                }
-            });
-
-            clearTimeout(timeout);
-
-            if (!response.ok) {
-                throw new Error(`Error en la consulta`);
-            }
-
-            let data;
-            if (expectJson) {
-                try {
-                    data = await response.json();
-                } catch (e) {
-                    data = await response.text();
-                }
+            if (typeof formattedData === 'object' && formattedData !== null) {
+                contenido = Object.entries(formattedData)
+                    .filter(([key]) => !key.toLowerCase().includes('error'))
+                    .map(([key, value]) => {
+                        if (typeof value === 'object') {
+                            return `<div class="mb-2">
+                                <span class="font-semibold">${key}:</span>
+                                <pre class="mt-1 text-sm">${JSON.stringify(value, null, 2)}</pre>
+                            </div>`;
+                        }
+                        return `<div class="mb-2">
+                            <span class="font-semibold">${key}:</span> ${value}
+                        </div>`;
+                    }).join('');
             } else {
-                data = await response.text();
+                contenido = `<pre class="text-sm">${formattedData}</pre>`;
             }
 
-            return { success: true, data };
-        } catch (error) {
-            if (i === CORS_PROXIES.length - 1) {
-                clearTimeout(timeout);
-                return {
-                    success: false,
-                    error: error.name === 'AbortError' ? 
-                        'Tiempo de espera agotado' : 
-                        `Error: ${error.message}`
-                };
-            }
-            await new Promise(resolve => setTimeout(resolve, 1000));
-        }
-    }
-}
-
-async function consultarApis(dni, sexo) {
-    const apis = [
-        {
-            url: `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
-            expectJson: true
-        },
-        {
-            url: `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
-            expectJson: true
-        },
-        {
-            url: `https://teldni-g77k.onrender.com/${dni}`,
-            expectJson: true
-        },
-        {
-            url: `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=${sexo}`,
-            expectJson: true
-        },
-        {
-            url: `https://fiscalizar.seguridadvial.gob.ar/api/retenciones?numeroDocumento=${dni}&sexo=${sexo}`,
-            expectJson: false
-        },
-        {
-            url: `https://renapersanjuan.onrender.com/${dni}/${sexo}`,
-            expectJson: true
-        }
-    ];
-
-    const resultadosDiv = document.getElementById('resultados');
-    resultadosDiv.innerHTML = `
-        <div class="result-container">
-            <div class="flex items-center justify-between mb-4">
-                <h2 class="text-xl font-semibold text-gray-800">Resultados de la consulta</h2>
-                <div class="loading-indicator"></div>
-            </div>
-            <div id="resultados-contenido" class="space-y-4"></div>
-        </div>
-    `;
-
-    const contenidoDiv = document.getElementById('resultados-contenido');
-
-    for (const api of apis) {
-        try {
-            const resultado = await fetchWithProxy(api.url, {}, api.expectJson);
-            const html = crearTarjetaResultado(
-                resultado.success ? resultado.data : resultado.error,
-                resultado.success
-            );
-            contenidoDiv.insertAdjacentHTML('beforeend', html);
-        } catch (error) {
-            const html = crearTarjetaResultado(
-                `Error en la consulta: ${error.message}`,
-                false
-            );
-            contenidoDiv.insertAdjacentHTML('beforeend', html);
-        }
-    }
-
-    const loadingIndicator = resultadosDiv.querySelector('.loading-indicator');
-    if (loadingIndicator) {
-        loadingIndicator.remove();
-    }
-}
-
-document.addEventListener('DOMContentLoaded', () => {
-    checkLoginState();
-    
-    setInterval(createSnow, 100);
-
-    document.getElementById('consulta-form').addEventListener('submit', async (e) => {
-        e.preventDefault();
-        
-        const dni = document.getElementById('dni').value;
-        const sexo = document.getElementById('sexo').value;
-        
-        if (!dni || !sexo) {
-            alert('Por favor complete todos los campos');
-            return;
-        }
-
-        try {
-            await consultarApis(dni, sexo);
-        } catch (error) {
-            document.getElementById('resultados').innerHTML = `
-                <div class="result-container">
-                    <div class="data-item error-data">
-                        <p>Error en la consulta: ${error.message}</p>
+            return `
+                <div class="data-item ${success ? 'success-data' : 'error-data'}">
+                    <div class="text-sm">
+                        ${contenido}
                     </div>
                 </div>
             `;
         }
-    });
-});
+
+        async function fetchWithProxy(url, options = {}, expectJson = true) {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 15000);
+
+            for (let i = 0; i < CORS_PROXIES.length; i++) {
+                try {
+                    const proxyUrl = `${getNextProxy()}${encodeURIComponent(url)}`;
+                    
+                    const response = await fetch(proxyUrl, {
+                        ...options,
+                        signal: controller.signal,
+                        headers: {
+                            'Accept': expectJson ? 'application/json' : 'text/plain',
+                            'User-Agent': 'Mozilla/5.0',
+                            ...options.headers
+                        }
+                    });
+
+                    clearTimeout(timeout);
+
+                    if (!response.ok) {
+                        throw new Error(`Error en la consulta`);
+                    }
+
+                    let data;
+                    if (expectJson) {
+                        try {
+                            data = await response.json();
+                        } catch (e) {
+                            data = await response.text();
+                        }
+                    } else {
+                        data = await response.text();
+                    }
+
+                    return { success: true, data };
+                } catch (error) {
+                    if (i === CORS_PROXIES.length - 1) {
+                        clearTimeout(timeout);
+                        return {
+                            success: false,
+                            error: error.name === 'AbortError' ? 
+                                'Tiempo de espera agotado' : 
+                                `Error: ${error.message}`
+                        };
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        }
+
+        async function consultarApis(dni, sexo) {
+            const apis = [
+                {
+                    url: `https://clientes.credicuotas.com.ar/v1/onboarding/resolvecustomers/${dni}`,
+                    expectJson: true
+                },
+                {
+                    url: `https://app.iosep.gob.ar/WsRest/api/Afiliados/GetAfiliadosC?Dni=${dni}`,
+                    expectJson: true
+                },
+                {
+                    url: `https://teldni-g77k.onrender.com/${dni}`,
+                    expectJson: true
+                },
+                {
+                    url: `https://fiscalizar.seguridadvial.gob.ar/api/licencias?numeroDocumento=${dni}&sexo=${sexo}`,
+                    expectJson: true
+                },
+                {
+                    url: `https://fiscalizar.seguridadvial.gob.ar/api/retenciones?numeroDocumento=${dni}&sexo=${sexo}`,
+                    expectJson: false
+                },
+                {
+                    url: `https://renapersanjuan.onrender.com/${dni}/${sexo}`,
+                    expectJson: true
+                }
+            ];
+
+            const resultadosDiv = document.getElementById('resultados');
+            resultadosDiv.innerHTML = `
+                <div class="result-container">
+                    <div class="flex items-center justify-between mb-4">
+                        <h2 class="text-xl font-semibold text-gray-800">Resultados de la consulta</h2>
+                        <div class="loading-indicator"></div>
+                    </div>
+                    <div id="resultados-contenido" class="space-y-4"></div>
+                </div>
+            `;
+
+            const contenidoDiv = document.getElementById('resultados-contenido');
+
+            for (const api of apis) {
+                try {
+                    const resultado = await fetchWithProxy(api.url, {}, api.expectJson);
+                    const html = crearTarjetaResultado(
+                        resultado.success ? resultado.data : resultado.error,
+                        resultado.success
+                    );
+                    contenidoDiv.insertAdjacentHTML('beforeend', html);
+                } catch (error) {
+                    const html = crearTarjetaResultado(
+                        `Error en la consulta: ${error.message}`,
+                        false
+                    );
+                    contenidoDiv.insertAdjacentHTML('beforeend', html);
+                }
+            }
+
+            const loadingIndicator = resultadosDiv.querySelector('.loading-indicator');
+            if (loadingIndicator) {
+                loadingIndicator.remove();
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            checkLoginState();
+            
+            setInterval(createSnow, 100);
+
+            document.getElementById('consulta-form').addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const dni = document.getElementById('dni').value;
+                const sexo = document.getElementById('sexo').value;
+                
+                if (!dni || !sexo) {
+                    alert('Por favor complete todos los campos');
+                    return;
+                }
+
+                try {
+                    await consultarApis(dni, sexo);
+                } catch (error) {
+                    document.getElementById('resultados').innerHTML = `
+                        <div class="result-container">
+                            <div class="data-item error-data">
+                                <p>Error en la consulta: ${error.message}</p>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+        });
+
+        // Add snowfall animation
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes snowfall {
+                0% {
+                    transform: translateY(-10vh);
+                }
+                100% {
+                    transform: translateY(100vh);
+                }
+            }
+        `;
+        document.head.appendChild(style);
+    </script>
+</body>
+</html>
+
